@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="VoiceNotes" />
+  <title>VoiceNotes AI</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --surface2: #1a1a26;
+      --border: rgba(255,255,255,0.07);
+      --accent: #7c6aff;
+      --accent2: #ff6a9e;
+      --accent3: #6affda;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --danger: #ff4466;
+      --rec: #ff2244;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Syne', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── LAYOUT ── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+    .logo-text span { color: var(--accent); }
+
+    /* API Key button */
+    #api-key-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #api-key-btn:hover { border-color: var(--accent); color: var(--accent); }
+    #api-key-btn.set { color: var(--accent3); border-color: rgba(106,255,218,0.3); }
+
+    /* ── VIEWS ── */
+    .view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    .view.active { display: flex; }
+
+    /* ── RECORD VIEW ── */
+    #record-view {
+      align-items: center;
+      justify-content: flex-start;
+      padding: 24px 20px;
+      gap: 24px;
+    }
+
+    /* Waveform canvas */
+    #waveform-container {
+      width: 100%;
+      height: 80px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      position: relative;
+    }
+    #waveform { width: 100%; height: 100%; display: block; }
+
+    /* Timer */
+    #timer {
+      font-family: 'DM Mono', monospace;
+      font-size: 48px;
+      font-weight: 300;
+      letter-spacing: 0.04em;
+      color: var(--text);
+      text-align: center;
+    }
+    #timer.recording { color: var(--rec); }
+
+    /* Record button */
+    .rec-btn-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    #rec-btn {
+      width: 88px; height: 88px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 40px rgba(124,106,255,0.4);
+    }
+    #rec-btn:active { transform: scale(0.93); }
+    #rec-btn.recording {
+      background: linear-gradient(135deg, var(--rec), #ff6644);
+      box-shadow: 0 0 40px rgba(255,34,68,0.5);
+      animation: pulse-ring 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-ring {
+      0%,100% { box-shadow: 0 0 30px rgba(255,34,68,0.4); }
+      50% { box-shadow: 0 0 60px rgba(255,34,68,0.7), 0 0 90px rgba(255,34,68,0.2); }
+    }
+    .rec-label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    /* Transcription result */
+    #transcription-box {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      flex: 1;
+      overflow-y: auto;
+      display: none;
+    }
+    #transcription-box.visible { display: block; }
+    .tx-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .tx-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent3);
+    }
+    .tx-date {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    #transcription-text {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+
+    /* Action buttons */
+    .actions {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+    .btn {
+      flex: 1;
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #9b6aff);
+      color: white;
+    }
+    .btn-primary:not(:disabled):active { transform: scale(0.97); }
+    .btn-secondary {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:not(:disabled):active { transform: scale(0.97); }
+    .btn-danger {
+      background: rgba(255,36,68,0.15);
+      border: 1px solid rgba(255,36,68,0.3);
+      color: var(--rec);
+    }
+
+    /* ── NOTES LIST VIEW ── */
+    #notes-view {
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #notes-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px 100px;
+    }
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+      color: var(--muted);
+    }
+    .empty-icon { font-size: 48px; opacity: 0.4; }
+    .empty-text { font-size: 14px; text-align: center; line-height: 1.5; }
+
+    /* Note card */
+    .note-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .note-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--accent), var(--accent2));
+    }
+    .note-card:active { transform: scale(0.99); background: var(--surface2); }
+    .note-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    .note-card-date {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .note-card-duration {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--accent);
+      background: rgba(124,106,255,0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .note-card-preview {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .note-card-summary {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--accent3);
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .note-card-tags {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .tag {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+    .tag-tx { background: rgba(106,255,218,0.1); color: var(--accent3); }
+    .tag-sum { background: rgba(124,106,255,0.15); color: var(--accent); }
+
+    /* ── NOTE DETAIL VIEW ── */
+    #detail-view {
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #back-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .detail-date { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+    .detail-duration {
+      margin-left: auto;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--accent);
+    }
+
+    .detail-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding-bottom: 30px;
+    }
+
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .section-label.tx { color: var(--accent3); }
+    .section-label.sum { color: var(--accent); }
+    .section-text {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      line-height: 1.75;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+    .section-text.loading {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .detail-actions {
+      display: flex;
+      gap: 10px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* ── BOTTOM NAV ── */
+    nav {
+      display: flex;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+      flex-shrink: 0;
+    }
+    .nav-btn {
+      flex: 1;
+      padding: 14px 0 16px;
+      border: none;
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      transition: color 0.2s;
+    }
+    .nav-btn .icon { font-size: 20px; }
+    .nav-btn.active { color: var(--accent); }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      display: flex;
+      align-items: flex-end;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      width: 100%;
+      background: var(--surface);
+      border-radius: 24px 24px 0 0;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    .modal-handle {
+      width: 36px; height: 4px;
+      background: var(--border);
+      border-radius: 99px;
+      margin: 0 auto 20px;
+    }
+    .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .modal-desc { font-size: 13px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+    .modal input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      outline: none;
+      margin-bottom: 12px;
+    }
+    .modal input:focus { border-color: var(--accent); }
+    .modal input::placeholder { color: var(--muted); }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 20px;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      transition: all 0.3s;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 200;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.error { border-color: rgba(255,68,102,0.4); color: var(--danger); }
+    #toast.success { border-color: rgba(106,255,218,0.4); color: var(--accent3); }
+
+    /* ── LOADER SPINNER ── */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🎙️</div>
+      <div class="logo-text">Voice<span>Notes</span></div>
+    </div>
+    <button id="api-key-btn">⚙ Clé API</button>
+  </header>
+
+  <!-- ══════════════════════════════════
+       VIEW : ENREGISTREMENT
+  ══════════════════════════════════ -->
+  <div class="view active" id="record-view">
+
+    <!-- Waveform -->
+    <div id="waveform-container">
+      <canvas id="waveform"></canvas>
+    </div>
+
+    <!-- Timer -->
+    <div id="timer">00:00</div>
+
+    <!-- Bouton record -->
+    <div class="rec-btn-wrap">
+      <button id="rec-btn">🎤</button>
+      <span class="rec-label" id="rec-label">Appuyer pour enregistrer</span>
+    </div>
+
+    <!-- Zone de transcription -->
+    <div id="transcription-box">
+      <div class="tx-header">
+        <span class="tx-title">Transcription</span>
+        <span class="tx-date" id="tx-date"></span>
+      </div>
+      <div id="transcription-text"></div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions" id="action-bar" style="display:none;">
+      <button class="btn btn-danger" id="discard-btn">🗑 Effacer</button>
+      <button class="btn btn-secondary" id="save-btn" disabled>💾 Sauver</button>
+      <button class="btn btn-primary" id="summarize-btn" disabled>✨ Résumé</button>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════
+       VIEW : LISTE DES NOTES
+  ══════════════════════════════════ -->
+  <div class="view" id="notes-view">
+    <div id="notes-list">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">📭</div>
+        <div class="empty-text">Aucune note pour l'instant.<br/>Enregistrez votre première note vocale !</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       VIEW : DETAIL D'UNE NOTE
+  ══════════════════════════════════ -->
+  <div class="view" id="detail-view">
+    <div class="detail-header">
+      <button id="back-btn">←</button>
+      <div>
+        <div class="detail-date" id="detail-date"></div>
+      </div>
+      <div class="detail-duration" id="detail-duration"></div>
+    </div>
+    <div class="detail-content">
+      <div class="section-card">
+        <div class="section-label tx">📝 Transcription</div>
+        <div class="section-text" id="detail-tx"></div>
+      </div>
+      <div class="section-card" id="detail-sum-card" style="display:none;">
+        <div class="section-label sum">✨ Résumé IA</div>
+        <div class="section-text" id="detail-sum"></div>
+      </div>
+    </div>
+    <div class="detail-actions">
+      <button class="btn btn-secondary" id="detail-summarize-btn">✨ Générer résumé</button>
+      <button class="btn btn-danger" id="detail-delete-btn">🗑 Supprimer</button>
+    </div>
+  </div>
+
+  <!-- ── BOTTOM NAV (masqué en mode détail) ── -->
+  <nav id="main-nav">
+    <button class="nav-btn active" data-view="record-view">
+      <span class="icon">🎙️</span>Enregistrer
+    </button>
+    <button class="nav-btn" data-view="notes-view">
+      <span class="icon">📋</span>Notes
+    </button>
+  </nav>
+</div>
+
+<!-- ══════════════════════════════════
+     MODAL : CLÉ API
+══════════════════════════════════ -->
+<div class="modal-overlay" id="api-modal-overlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔑 Clé API Mistral</div>
+    <div class="modal-desc">Votre clé API est stockée uniquement sur votre appareil et n'est jamais envoyée ailleurs qu'à l'API Mistral.</div>
+    <input type="password" id="api-key-input" placeholder="sk-..." autocomplete="off" />
+    <button class="btn btn-primary" id="save-api-key-btn" style="width:100%;">Enregistrer</button>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════
+// ÉTAT GLOBAL
+// ════════════════════════════════════════
+let apiKey = localStorage.getItem('mistral_api_key') || '';
+let notes = JSON.parse(localStorage.getItem('voicenotes_data') || '[]');
+let currentNote = null; // note en cours de création
+let currentDetailId = null;
+
+// Enregistrement
+let mediaRecorder = null;
+let audioChunks = [];
+let audioBlob = null;
+let isRecording = false;
+let timerInterval = null;
+let timerSeconds = 0;
+let analyser = null;
+let animFrame = null;
+let audioCtx = null;
+let recordingDate = null;
+
+// ════════════════════════════════════════
+// UTILITAIRES
+// ════════════════════════════════════════
+function saveNotes() {
+  localStorage.setItem('voicenotes_data', JSON.stringify(notes));
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { weekday:'short', day:'numeric', month:'short', year:'numeric' })
+    + ' · ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+}
+
+function formatDuration(s) {
+  const m = Math.floor(s / 60), sec = s % 60;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + type;
+  clearTimeout(t._timeout);
+  t._timeout = setTimeout(() => t.className = '', 2800);
+}
+
+// ════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === id);
+  });
+  document.getElementById('main-nav').style.display = id === 'detail-view' ? 'none' : 'flex';
+}
+
+document.querySelectorAll('.nav-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    if (b.dataset.view === 'notes-view') renderNotesList();
+    showView(b.dataset.view);
+  });
+});
+
+// ════════════════════════════════════════
+// API KEY MODAL
+// ════════════════════════════════════════
+const apiKeyBtn = document.getElementById('api-key-btn');
+const apiModal = document.getElementById('api-modal-overlay');
+const apiKeyInput = document.getElementById('api-key-input');
+
+function updateApiKeyBtnState() {
+  apiKeyBtn.textContent = apiKey ? '✓ Clé API' : '⚙ Clé API';
+  apiKeyBtn.className = apiKey ? 'set' : '';
+}
+updateApiKeyBtnState();
+
+apiKeyBtn.addEventListener('click', () => {
+  apiKeyInput.value = apiKey;
+  apiModal.classList.add('open');
+  setTimeout(() => apiKeyInput.focus(), 400);
+});
+apiModal.addEventListener('click', e => { if (e.target === apiModal) apiModal.classList.remove('open'); });
+
+document.getElementById('save-api-key-btn').addEventListener('click', () => {
+  apiKey = apiKeyInput.value.trim();
+  localStorage.setItem('mistral_api_key', apiKey);
+  apiModal.classList.remove('open');
+  updateApiKeyBtnState();
+  showToast('Clé API enregistrée ✓', 'success');
+});
+
+// ════════════════════════════════════════
+// WAVEFORM VISUALISATION
+// ════════════════════════════════════════
+const canvas = document.getElementById('waveform');
+const ctx2d = canvas.getContext('2d');
+
+function resizeCanvas() {
+  canvas.width = canvas.offsetWidth * devicePixelRatio;
+  canvas.height = canvas.offsetHeight * devicePixelRatio;
+}
+resizeCanvas();
+
+function drawIdle() {
+  resizeCanvas();
+  const w = canvas.width, h = canvas.height;
+  ctx2d.clearRect(0, 0, w, h);
+  ctx2d.strokeStyle = 'rgba(124,106,255,0.2)';
+  ctx2d.lineWidth = 1.5 * devicePixelRatio;
+  ctx2d.beginPath();
+  ctx2d.moveTo(0, h / 2);
+  ctx2d.lineTo(w, h / 2);
+  ctx2d.stroke();
+}
+drawIdle();
+
+function drawWave() {
+  if (!analyser) return;
+  animFrame = requestAnimationFrame(drawWave);
+  const bufLen = analyser.frequencyBinCount;
+  const data = new Uint8Array(bufLen);
+  analyser.getByteTimeDomainData(data);
+  const w = canvas.width, h = canvas.height;
+  ctx2d.clearRect(0, 0, w, h);
+
+  const grad = ctx2d.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0, '#7c6aff');
+  grad.addColorStop(0.5, '#ff6a9e');
+  grad.addColorStop(1, '#6affda');
+  ctx2d.strokeStyle = grad;
+  ctx2d.lineWidth = 2 * devicePixelRatio;
+  ctx2d.beginPath();
+
+  const step = w / bufLen;
+  let x = 0;
+  for (let i = 0; i < bufLen; i++) {
+    const y = (data[i] / 128.0) * (h / 2);
+    i === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+    x += step;
+  }
+  ctx2d.stroke();
+}
+
+// ════════════════════════════════════════
+// TIMER
+// ════════════════════════════════════════
+function startTimer() {
+  timerSeconds = 0;
+  document.getElementById('timer').textContent = '00:00';
+  document.getElementById('timer').classList.add('recording');
+  timerInterval = setInterval(() => {
+    timerSeconds++;
+    document.getElementById('timer').textContent = formatDuration(timerSeconds);
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+  document.getElementById('timer').classList.remove('recording');
+}
+
+// ════════════════════════════════════════
+// ENREGISTREMENT
+// ════════════════════════════════════════
+const recBtn = document.getElementById('rec-btn');
+const recLabel = document.getElementById('rec-label');
+
+recBtn.addEventListener('click', async () => {
+  if (!isRecording) await startRecording();
+  else stopRecording();
+});
+
+async function startRecording() {
+  if (!apiKey) {
+    showToast('⚠️ Configurez votre clé API Mistral d\'abord', 'error');
+    apiModal.classList.add('open');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    // Analyser pour la waveform
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    src.connect(analyser);
+
+    // Choisir le bon format
+    const mimeTypes = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/mp4',
+    ];
+    const supportedMime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+
+    mediaRecorder = new MediaRecorder(stream, supportedMime ? { mimeType: supportedMime } : {});
+    audioChunks = [];
+    recordingDate = new Date().toISOString();
+
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = onRecordingStop;
+    mediaRecorder.start(100);
+
+    isRecording = true;
+    recBtn.classList.add('recording');
+    recBtn.textContent = '⏹';
+    recLabel.textContent = 'Appuyer pour arrêter';
+    document.getElementById('transcription-box').classList.remove('visible');
+    document.getElementById('action-bar').style.display = 'none';
+    startTimer();
+    drawWave();
+  } catch (err) {
+    showToast('❌ Impossible d\'accéder au microphone', 'error');
+  }
+}
+
+function stopRecording() {
+  isRecording = false;
+  recBtn.classList.remove('recording');
+  recBtn.textContent = '⏳';
+  recLabel.textContent = 'Transcription en cours…';
+  recBtn.disabled = true;
+  mediaRecorder.stop();
+  stopTimer();
+  cancelAnimationFrame(animFrame);
+  drawIdle();
+  if (audioCtx) { audioCtx.close(); audioCtx = null; analyser = null; }
+  mediaRecorder.stream.getTracks().forEach(t => t.stop());
+}
+
+async function onRecordingStop() {
+  const mime = mediaRecorder.mimeType || 'audio/webm';
+  audioBlob = new Blob(audioChunks, { type: mime });
+  await transcribeAudio(audioBlob, mime);
+}
+
+// ════════════════════════════════════════
+// TRANSCRIPTION (Mistral / Whisper)
+// ════════════════════════════════════════
+async function transcribeAudio(blob, mime) {
+  try {
+    // Extension selon le mime type
+    const extMap = {
+      'audio/webm': 'webm', 'audio/ogg': 'ogg',
+      'audio/mp4': 'mp4', 'audio/mpeg': 'mp3',
+    };
+    const ext = extMap[mime.split(';')[0]] || 'webm';
+
+    const formData = new FormData();
+    formData.append('file', blob, `recording.${ext}`);
+    formData.append('model', 'mistral-stt');
+
+    const res = await fetch('https://api.mistral.ai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = data.text || '';
+
+    // Affichage
+    showTranscription(text);
+  } catch (err) {
+    recBtn.disabled = false;
+    recBtn.textContent = '🎤';
+    recLabel.textContent = 'Appuyer pour enregistrer';
+    showToast('❌ Erreur transcription : ' + err.message, 'error');
+  }
+}
+
+function showTranscription(text) {
+  const duration = timerSeconds;
+  currentNote = {
+    id: Date.now().toString(),
+    date: recordingDate,
+    duration: duration,
+    transcription: text,
+    summary: null,
+  };
+
+  document.getElementById('tx-date').textContent = formatDate(recordingDate);
+  document.getElementById('transcription-text').textContent = text || '(Aucun texte détecté)';
+  document.getElementById('transcription-box').classList.add('visible');
+  document.getElementById('action-bar').style.display = 'flex';
+
+  recBtn.disabled = false;
+  recBtn.textContent = '🎤';
+  recLabel.textContent = 'Appuyer pour enregistrer';
+
+  const saveBtn = document.getElementById('save-btn');
+  const sumBtn = document.getElementById('summarize-btn');
+  saveBtn.disabled = !text;
+  sumBtn.disabled = !text;
+
+  showToast('✓ Transcription terminée', 'success');
+}
+
+// ════════════════════════════════════════
+// ACTIONS : SAVE / DISCARD / SUMMARIZE
+// ════════════════════════════════════════
+document.getElementById('discard-btn').addEventListener('click', () => {
+  currentNote = null;
+  audioBlob = null;
+  document.getElementById('transcription-box').classList.remove('visible');
+  document.getElementById('action-bar').style.display = 'none';
+  document.getElementById('timer').textContent = '00:00';
+  showToast('Note supprimée');
+});
+
+document.getElementById('save-btn').addEventListener('click', () => {
+  if (!currentNote) return;
+  notes.unshift(currentNote);
+  saveNotes();
+  currentNote = null;
+  audioBlob = null;
+  document.getElementById('transcription-box').classList.remove('visible');
+  document.getElementById('action-bar').style.display = 'none';
+  document.getElementById('timer').textContent = '00:00';
+  showToast('Note sauvegardée ✓', 'success');
+});
+
+document.getElementById('summarize-btn').addEventListener('click', async () => {
+  if (!currentNote) return;
+  await generateSummary(currentNote, true);
+});
+
+// ════════════════════════════════════════
+// RÉSUMÉ IA (Mistral Chat)
+// ════════════════════════════════════════
+async function generateSummary(note, isCurrentNote = false) {
+  const btn = isCurrentNote
+    ? document.getElementById('summarize-btn')
+    : document.getElementById('detail-summarize-btn');
+
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Résumé…';
+
+  try {
+    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'mistral-large-latest',
+        messages: [
+          {
+            role: 'system',
+            content: 'Tu es un assistant expert en synthèse de notes vocales. Fais un résumé clair, structuré et concis en français. Mets en avant les points clés, actions à faire et décisions importantes. Sois direct et précis, sans introduction superflue.'
+          },
+          {
+            role: 'user',
+            content: `Voici la transcription d'une note vocale enregistrée le ${formatDate(note.date)} :\n\n${note.transcription}\n\nFais un résumé structuré.`
+          }
+        ],
+        max_tokens: 600,
+        temperature: 0.3,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const summary = data.choices?.[0]?.message?.content || '';
+    note.summary = summary;
+
+    // Sauvegarder
+    if (!isCurrentNote) {
+      const idx = notes.findIndex(n => n.id === note.id);
+      if (idx !== -1) { notes[idx] = note; saveNotes(); }
+      renderDetailView(note);
+    } else {
+      // Pour la note courante, on met à jour l'affichage
+      // et on active la sauvegarde
+      document.getElementById('save-btn').disabled = false;
+      showToast('✨ Résumé généré !', 'success');
+    }
+
+    btn.disabled = false;
+    btn.textContent = origText;
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = origText;
+    showToast('❌ Erreur résumé : ' + err.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════
+// LISTE DES NOTES
+// ════════════════════════════════════════
+function renderNotesList() {
+  const list = document.getElementById('notes-list');
+  const empty = document.getElementById('empty-state');
+
+  // Vider (sauf empty state)
+  Array.from(list.children).forEach(c => { if (c !== empty) c.remove(); });
+
+  if (notes.length === 0) {
+    empty.style.display = 'flex';
+    return;
+  }
+  empty.style.display = 'none';
+
+  notes.forEach(note => {
+    const card = document.createElement('div');
+    card.className = 'note-card';
+    card.innerHTML = `
+      <div class="note-card-header">
+        <div class="note-card-date">${formatDate(note.date)}</div>
+        <div class="note-card-duration">${formatDuration(note.duration)}</div>
+      </div>
+      <div class="note-card-preview">${note.transcription || '(vide)'}</div>
+      ${note.summary ? `<div class="note-card-summary">✨ ${note.summary.slice(0, 80)}…</div>` : ''}
+      <div class="note-card-tags">
+        <span class="tag tag-tx">Transcription</span>
+        ${note.summary ? '<span class="tag tag-sum">Résumé IA</span>' : ''}
+      </div>
+    `;
+    card.addEventListener('click', () => openDetail(note));
+    list.appendChild(card);
+  });
+}
+
+// ════════════════════════════════════════
+// DÉTAIL D'UNE NOTE
+// ════════════════════════════════════════
+function openDetail(note) {
+  currentDetailId = note.id;
+  renderDetailView(note);
+  showView('detail-view');
+}
+
+function renderDetailView(note) {
+  document.getElementById('detail-date').textContent = formatDate(note.date);
+  document.getElementById('detail-duration').textContent = '⏱ ' + formatDuration(note.duration);
+  document.getElementById('detail-tx').textContent = note.transcription || '(vide)';
+
+  const sumCard = document.getElementById('detail-sum-card');
+  const sumText = document.getElementById('detail-sum');
+  if (note.summary) {
+    sumCard.style.display = 'block';
+    sumText.textContent = note.summary;
+    sumText.classList.remove('loading');
+    document.getElementById('detail-summarize-btn').textContent = '🔄 Re-générer';
+  } else {
+    sumCard.style.display = 'none';
+    document.getElementById('detail-summarize-btn').textContent = '✨ Générer résumé';
+  }
+}
+
+document.getElementById('back-btn').addEventListener('click', () => {
+  renderNotesList();
+  showView('notes-view');
+});
+
+document.getElementById('detail-summarize-btn').addEventListener('click', async () => {
+  const note = notes.find(n => n.id === currentDetailId);
+  if (!note) return;
+  const sumCard = document.getElementById('detail-sum-card');
+  const sumText = document.getElementById('detail-sum');
+  sumCard.style.display = 'block';
+  sumText.textContent = 'Génération en cours…';
+  sumText.classList.add('loading');
+  await generateSummary(note, false);
+});
+
+document.getElementById('detail-delete-btn').addEventListener('click', () => {
+  if (!confirm('Supprimer cette note ?')) return;
+  notes = notes.filter(n => n.id !== currentDetailId);
+  saveNotes();
+  renderNotesList();
+  showView('notes-view');
+  showToast('Note supprimée');
+});
+
+// ════════════════════════════════════════
+// SERVICE WORKER
+// ════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
