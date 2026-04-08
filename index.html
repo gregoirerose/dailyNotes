@@ -377,6 +377,13 @@
       border-radius: 14px;
       padding: 16px;
     }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
     .section-label {
       font-size: 10px;
       font-weight: 700;
@@ -384,8 +391,23 @@
       text-transform: uppercase;
       margin-bottom: 10px;
     }
+    .section-header .section-label { margin-bottom: 0; }
     .section-label.tx { color: var(--accent3); }
     .section-label.sum { color: var(--accent); }
+    .copy-summary-btn {
+      display: none;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 5px 8px;
+      border-radius: 8px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .copy-summary-btn.visible { display: inline-flex; }
+    .copy-summary-btn:active { transform: scale(0.97); }
     .section-text {
       font-family: 'DM Mono', monospace;
       font-size: 13px;
@@ -600,7 +622,10 @@
         <div class="section-text" id="detail-tx"></div>
       </div>
       <div class="section-card" id="detail-sum-card" style="display:none;">
-        <div class="section-label sum">✨ Résumé IA</div>
+        <div class="section-header">
+          <div class="section-label sum">✨ Résumé IA</div>
+          <button class="copy-summary-btn" id="copy-summary-btn" type="button">Copier</button>
+        </div>
         <div class="section-text" id="detail-sum"></div>
       </div>
     </div>
@@ -1098,13 +1123,16 @@ function renderDetailView(note) {
 
   const sumCard = document.getElementById('detail-sum-card');
   const sumText = document.getElementById('detail-sum');
+  const copyBtn = document.getElementById('copy-summary-btn');
   if (note.summary) {
     sumCard.style.display = 'block';
     sumText.textContent = note.summary;
     sumText.classList.remove('loading');
+    copyBtn.classList.add('visible');
     document.getElementById('detail-summarize-btn').textContent = '🔄 Re-générer';
   } else {
     sumCard.style.display = 'none';
+    copyBtn.classList.remove('visible');
     document.getElementById('detail-summarize-btn').textContent = '✨ Générer résumé';
   }
 }
@@ -1119,10 +1147,45 @@ document.getElementById('detail-summarize-btn').addEventListener('click', async 
   if (!note) return;
   const sumCard = document.getElementById('detail-sum-card');
   const sumText = document.getElementById('detail-sum');
+  document.getElementById('copy-summary-btn').classList.remove('visible');
   sumCard.style.display = 'block';
   sumText.textContent = 'Génération en cours…';
   sumText.classList.add('loading');
   await generateSummary(note, false);
+});
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    const copied = document.execCommand('copy');
+    if (!copied) throw new Error('Copie impossible');
+  } finally {
+    textarea.remove();
+  }
+}
+
+document.getElementById('copy-summary-btn').addEventListener('click', async () => {
+  const note = notes.find(n => n.id === currentDetailId);
+  if (!note?.summary) return;
+
+  try {
+    await copyTextToClipboard(note.summary);
+    showToast('Résumé copié ✓', 'success');
+  } catch (err) {
+    showToast('❌ Copie impossible : ' + err.message, 'error');
+  }
 });
 
 document.getElementById('detail-delete-btn').addEventListener('click', () => {
