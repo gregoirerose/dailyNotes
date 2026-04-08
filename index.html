@@ -682,6 +682,7 @@ let analyser = null;
 let animFrame = null;
 let audioCtx = null;
 let recordingDate = null;
+let screenWakeLock = null;
 
 // ════════════════════════════════════════
 // UTILITAIRES
@@ -827,6 +828,40 @@ function stopTimer() {
 }
 
 // ════════════════════════════════════════
+// MAINTIEN DE L'ÉCRAN ALLUMÉ
+// ════════════════════════════════════════
+async function requestScreenWakeLock() {
+  if (screenWakeLock) return;
+  if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+
+  try {
+    const lock = await navigator.wakeLock.request('screen');
+    screenWakeLock = lock;
+    lock.addEventListener('release', () => {
+      if (screenWakeLock === lock) screenWakeLock = null;
+    });
+  } catch (err) {
+    console.warn('Wake Lock indisponible:', err);
+  }
+}
+
+async function releaseScreenWakeLock() {
+  if (!screenWakeLock) return;
+
+  const lock = screenWakeLock;
+  screenWakeLock = null;
+  try {
+    await lock.release();
+  } catch (err) {
+    console.warn('Impossible de relâcher le Wake Lock:', err);
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (isRecording && document.visibilityState === 'visible') requestScreenWakeLock();
+});
+
+// ════════════════════════════════════════
 // ENREGISTREMENT
 // ════════════════════════════════════════
 const recBtn = document.getElementById('rec-btn');
@@ -876,9 +911,11 @@ async function startRecording() {
     recLabel.textContent = 'Appuyer pour arrêter';
     document.getElementById('transcription-box').classList.remove('visible');
     document.getElementById('action-bar').style.display = 'none';
+    await requestScreenWakeLock();
     startTimer();
     drawWave();
   } catch (err) {
+    await releaseScreenWakeLock();
     showToast('❌ Impossible d\'accéder au microphone', 'error');
   }
 }
@@ -891,6 +928,7 @@ function stopRecording() {
   recBtn.disabled = true;
   mediaRecorder.stop();
   stopTimer();
+  void releaseScreenWakeLock();
   cancelAnimationFrame(animFrame);
   drawIdle();
   if (audioCtx) { audioCtx.close(); audioCtx = null; analyser = null; }
