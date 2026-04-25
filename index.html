@@ -408,6 +408,14 @@
     }
     .copy-summary-btn.visible { display: inline-flex; }
     .copy-summary-btn:active { transform: scale(0.97); }
+    .detail-actions {
+      display: flex;
+      gap: 10px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
     .section-text {
       font-family: 'DM Mono', monospace;
       font-size: 13px;
@@ -418,14 +426,6 @@
     .section-text.loading {
       color: var(--muted);
       font-style: italic;
-    }
-
-    .detail-actions {
-      display: flex;
-      gap: 10px;
-      padding: 12px 16px;
-      border-top: 1px solid var(--border);
-      flex-shrink: 0;
     }
 
     /* ── BOTTOM NAV ── */
@@ -631,6 +631,8 @@
     </div>
     <div class="detail-actions">
       <button class="btn btn-secondary" id="detail-summarize-btn">✨ Générer résumé</button>
+      <button class="btn btn-secondary" id="detail-copy-note-btn">📋 Copier note</button>
+      <button class="btn btn-secondary" id="detail-share-btn">📤 Partager</button>
       <button class="btn btn-danger" id="detail-delete-btn">🗑 Supprimer</button>
     </div>
   </div>
@@ -700,6 +702,31 @@ function formatDate(iso) {
 function formatDuration(s) {
   const m = Math.floor(s / 60), sec = s % 60;
   return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function normalizeSummaryText(text) {
+  return (text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^\s*[-*]\s+/gm, '• ')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function buildNoteShareText(note) {
+  const parts = [
+    'Note vocale',
+    `Date : ${formatDate(note.date)}`,
+    `Durée : ${formatDuration(note.duration)}`,
+  ];
+
+  if (note.summary) parts.push('', 'Résumé IA', normalizeSummaryText(note.summary));
+  if (note.transcription) parts.push('', 'Transcription', note.transcription.trim());
+
+  return parts.join('\n').trim();
 }
 
 function showToast(msg, type = '') {
@@ -1067,11 +1094,11 @@ async function generateSummary(note, isCurrentNote = false) {
         messages: [
           {
             role: 'system',
-            content: 'Tu es un assistant expert en synthèse de notes vocales. Fais un résumé clair, structuré et concis en français. Mets en avant les points clés, actions à faire et décisions importantes. Sois direct et précis, sans introduction superflue.'
+            content: "Tu es un assistant expert en synthèse de notes vocales. Rédige un résumé clair, structuré et concis en français, en texte brut uniquement. N'utilise pas de markdown, pas de tableaux, pas de balises, pas de titres avec #. Le résultat doit être directement copiable dans un email, un document Word ou un message WhatsApp. Mets en avant les points clés, actions à faire et décisions importantes. Sois direct et précis, sans introduction superflue."
           },
           {
             role: 'user',
-            content: `Voici la transcription d'une note vocale enregistrée le ${formatDate(note.date)} :\n\n${note.transcription}\n\nFais un résumé structuré.`
+            content: `Voici la transcription d'une note vocale enregistrée le ${formatDate(note.date)} :\n\n${note.transcription}\n\nFais un résumé structuré en texte brut, prêt à être copié-collé dans un email ou un document.`
           }
         ],
         max_tokens: 600,
@@ -1085,7 +1112,7 @@ async function generateSummary(note, isCurrentNote = false) {
     }
 
     const data = await res.json();
-    const summary = data.choices?.[0]?.message?.content || '';
+    const summary = normalizeSummaryText(data.choices?.[0]?.message?.content || '');
     note.summary = summary;
 
     // Sauvegarder
@@ -1163,8 +1190,10 @@ function renderDetailView(note) {
   const sumText = document.getElementById('detail-sum');
   const copyBtn = document.getElementById('copy-summary-btn');
   if (note.summary) {
+    const cleanedSummary = normalizeSummaryText(note.summary);
+    note.summary = cleanedSummary;
     sumCard.style.display = 'block';
-    sumText.textContent = note.summary;
+    sumText.textContent = cleanedSummary;
     sumText.classList.remove('loading');
     copyBtn.classList.add('visible');
     document.getElementById('detail-summarize-btn').textContent = '🔄 Re-générer';
@@ -1219,10 +1248,46 @@ document.getElementById('copy-summary-btn').addEventListener('click', async () =
   if (!note?.summary) return;
 
   try {
-    await copyTextToClipboard(note.summary);
+    await copyTextToClipboard(normalizeSummaryText(note.summary));
     showToast('Résumé copié ✓', 'success');
   } catch (err) {
     showToast('❌ Copie impossible : ' + err.message, 'error');
+  }
+});
+
+document.getElementById('detail-copy-note-btn').addEventListener('click', async () => {
+  const note = notes.find(n => n.id === currentDetailId);
+  if (!note) return;
+
+  try {
+    await copyTextToClipboard(buildNoteShareText(note));
+    showToast('Note copiée ✓', 'success');
+  } catch (err) {
+    showToast('❌ Copie impossible : ' + err.message, 'error');
+  }
+});
+
+document.getElementById('detail-share-btn').addEventListener('click', async () => {
+  const note = notes.find(n => n.id === currentDetailId);
+  if (!note) return;
+
+  const shareText = buildNoteShareText(note);
+
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: `Note vocale - ${formatDate(note.date)}`,
+        text: shareText,
+      });
+      showToast('Note partagée ✓', 'success');
+      return;
+    }
+
+    await copyTextToClipboard(shareText);
+    showToast('Partage natif indisponible, note copiée ✓', 'success');
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    showToast('❌ Partage impossible : ' + err.message, 'error');
   }
 });
 
